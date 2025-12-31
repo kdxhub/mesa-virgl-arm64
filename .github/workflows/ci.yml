@@ -1,0 +1,68 @@
+name: Build Mesa-virgl arm64 deb
+
+on:
+  schedule:                      # 每月 1 & 16 号 02:00 UTC
+    - cron: '0 2 1 * *'
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      # 0. 启用官方 arm64 原生 runner（免费 2000 min/月）
+      - uses: actions/checkout@v4
+
+      # 1. 装依赖
+      - name: Install deps
+        run: |
+          sudo dpkg --add-architecture arm64
+          sudo apt update
+          sudo apt install -y \
+            build-essential meson ninja-build pkg-config \
+            python3 python3-pip python3-mako \
+            llvm-dev clang lld flex bison byacc \
+            libdrm-dev libxml2-dev libzstd-dev libelf-dev \
+            libx11-dev libxext-dev libxdamage-dev libxcb-*-dev \
+            cmake libunwind-dev
+
+      # 2. 拉最新 Mesa
+      - name: Clone Mesa
+        run: |
+          git clone --depth=1 https://gitlab.freedesktop.org/mesa/mesa.git mesa-src
+
+      # 3. 配置 & 编译（仅 virgl + swrast）
+      - name: Configure & build
+        run: |
+          cd mesa-src
+          meson setup build \
+            -Dprefix=/usr \
+            -Dplatforms=x11 \
+            -Dgallium-drivers=virgl,swrast \
+            -Dvulkan-drivers= \
+            -Dllvm=enabled \
+            -Dbuildtype=release \
+            -Dpkg-config-path=/usr/lib/pkgconfig
+          ninja -C build
+          # 打成 deb
+          mkdir -p ../out
+          DESTDIR=$(pwd)/pkg ninja -C build install
+          cd pkg
+          fakeroot dpkg-deb -b . ../../out/mesa-virgl-arm64.deb
+
+      # 4. 上传 Release（自动打 tag）
+      - name: Upload Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ github.run_number }}
+          files: out/mesa-virgl-arm64.deb
+          name: Mesa-virgl arm64 build ${{ github.run_number }}
+          body: |
+            自动构建 Mesa-virgl（含 virpipe）  
+            用法：  
+            ```bash
+            dpkg -i mesa-virgl-arm64.deb
+            export GALLIUM_DRIVER=virpipe
+            ```
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
