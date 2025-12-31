@@ -8,7 +8,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-lateset
     steps:
       # 0. 启用官方 arm64 原生 runner（免费 2000 min/月）
       - uses: actions/checkout@v4
